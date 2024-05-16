@@ -27,43 +27,59 @@ class BiGeaR_tch(BasicModel):
         self.__init_model()
 
     def __init_model(self):
+        # 用户数
         self.num_users = self.dataset.get_num_users()
+        # 物品数
         self.num_items = self.dataset.get_num_items()
+        # 维数
         self.dim = board.args.dim
+        # 跳数
         self.num_layers = board.args.layers
+        # 用户和物品的原始 embedding
         self.user_embed = nn.Embedding(num_embeddings=self.num_users, embedding_dim=self.dim)
         self.item_embed = nn.Embedding(num_embeddings=self.num_items, embedding_dim=self.dim)
+        # 论文中的 w_l，第 l 层 embedding 的权重
         self.lambdas = self.compute_concat_scaler()
+        
         self.pos_rank = None
         self.neg_rank = None
 
+        # 将原始 embedding 以正态分布初始化
         nn.init.normal_(self.user_embed.weight, std=0.1)
         nn.init.normal_(self.item_embed.weight, std=0.1)
         board.cprint('initializing with NORMAL distribution.')
 
         self.f = nn.Sigmoid()
+        # 稀疏交互矩阵，注意这不是传统 u-i 矩阵，而是 [#users + #items, #users + #items] 的邻接矩阵
         self.Graph = self.dataset.load_sparse_graph()
 
+    # 计算 w_l, 随层数增高而线性增长
     def compute_concat_scaler(self):
         lambdas = [torch.tensor((float)(x + 1) / (self.num_layers + 1)) for x in range(self.num_layers + 1)]
         return lambdas
 
-
+    # Embedding aggregation
     def aggregate_embed(self):
-        user_embed = self.user_embed.weight
-        item_embed = self.item_embed.weight
+        user_embed = self.user_embed.weight # [#users, dim]
+        item_embed = self.item_embed.weight # [#items, dim]
 
-        con_original_embed = torch.cat([user_embed, item_embed])
-        con_embed_list = [con_original_embed * self.lambdas[0]]
+        # 连接用户和物品的原始 embedding
+        con_original_embed = torch.cat([user_embed, item_embed]) # [#users + #items, dim]
+        # 将乘以第一个缩放因子 self.lambdas[0] 后的原始 embedding 添加到列表中
+        con_embed_list = [con_original_embed * self.lambdas[0]] # [1, #users + #items, dim]
 
         for layer in range(self.num_layers):
-            con_original_embed = torch.sparse.mm(self.Graph, con_original_embed)
-            con_embed_list.append(con_original_embed * self.lambdas[layer + 1])
+            # 利用稀疏矩阵，下一层 embedding 结果 = 交互矩阵 * 当前 embedding，意义是邻居 embedding 的加和
+            con_original_embed = torch.sparse.mm(self.Graph, con_original_embed) # [#users + #items, dim]
+            # 将下一层 * 缩放因子后加入列表
+            con_embed_list.append(con_original_embed * self.lambdas[layer + 1]) # [1 + layer, #users + #items, dim]
 
-        con_origin_output = torch.cat(con_embed_list, dim=1)
+        # 将列表中的 embedding 横向连接起来，embedding 长度变为 (1 + num_layer) * dim 
+        con_origin_output = torch.cat(con_embed_list, dim=1) # [#users + #items, (1 + num_layer) * dim]
+        # split 用户和物品
         con_origin_users_embed, con_origin_items_embed = torch.split(con_origin_output,
                                                                      [self.num_users, self.num_items])
-        return con_origin_users_embed, con_origin_items_embed
+        return con_origin_users_embed, con_origin_items_embed # [#users, (1 + num_layer) * dim], [#items, (1 + num_layer) * dim]
 
     def _BPR_loss(self, user_embed, pos_embed, neg_embed):
         pos_scores = torch.mul(user_embed, pos_embed)
@@ -74,6 +90,9 @@ class BiGeaR_tch(BasicModel):
         return loss
 
     def loss(self, user_index, pos_index, neg_index):
+        # TODO: 原版采样器不采负样本，节约运行时间
+        # TODO: 在这个函数里合成负样本，在 aggregate_embed 得到 con_origin_item_embed 之后操作
+        # TODO: 合成后维护好正常的 loss 计算流程
         user_con_embed = self.user_embed(user_index)
         pos_con_embed = self.item_embed(pos_index)
         neg_con_embed = self.item_embed(neg_index)
