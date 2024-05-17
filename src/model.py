@@ -90,9 +90,10 @@ class BiGeaR_tch(BasicModel):
         return loss
 
     def loss(self, user_index, pos_index, neg_index):
-        # TODO: 原版采样器不采负样本，节约运行时间
+        # ✔ TODO: 原版采样器不采负样本，节约运行时间   Comment: 使用老采样器采 neg_ratio 个负样本创建负样本池，neg_ratio ∈ [16, 32, 64, 128]
         # TODO: 在这个函数里合成负样本，在 aggregate_embed 得到 con_origin_item_embed 之后操作
         # TODO: 合成后维护好正常的 loss 计算流程
+        # TODO: 尝试 K-pair BPR loss
         user_con_embed = self.user_embed(user_index)
         pos_con_embed = self.item_embed(pos_index)
         neg_con_embed = self.item_embed(neg_index)

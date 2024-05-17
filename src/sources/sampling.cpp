@@ -25,19 +25,27 @@ int randint_(int end)
 }
 
 py::array_t<int> sample_negative(int user_num, int item_num, int train_num, int neg_num, std::vector<std::vector<int>> allPos){
-    int perUserNum = (train_num / user_num);
-    int row = neg_num + 2;
+    // 计算要对每个用户生成的样本数量，即训练样本数量除以用户数量
+    int perUserNum = (train_num / user_num); 
+    // 计算每个用户样本的个数，包括用户编号、正样本编号和负样本编号
+    int row = neg_num + 2; 
+    // 创建 [user_num * perUserNum，row] 的 S_array，存储采样结果
     py::array_t<int> S_array = py::array_t<int>({user_num * perUserNum, row});
+    // 获取 S_array 的底层数据指针
     py::buffer_info buf_S = S_array.request();
     int *ptr = (int *)buf_S.ptr;
-
+    // 循环遍历每个用户
     for (int user = 0; user < user_num; user++){
+        // 获取该用户正样本列表
         std::vector<int> pos_item = allPos[user];
-
+        // 循环遍历要生成的样本个数
         for (int pair_i = 0; pair_i < perUserNum; pair_i++){
             int negitem = 0;
+            // [user * perUserNum + pair_i, 0] 位置写入 user
             ptr[(user * perUserNum + pair_i) * row] = user;
+            // [user * perUserNum + pair_i, 1] 位置写入正样本采样
             ptr[(user * perUserNum + pair_i) * row + 1] = pos_item[randint_(pos_item.size())];
+            // 负样本采样，采 neg_num 个
             for (int index = 2; index < neg_num + 2; index++){
                 do{
                     negitem = randint_(item_num);
