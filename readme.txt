@@ -1,3 +1,26 @@
+ps -ef | grep tensorboard | awk '{print $2}' | xargs kill -9 
+tensorboard --port 6007 --logdir /root/bigear/src/results/
+
+一般预训练
+✔ nohup python -u main_pretrain_ori.py --dataset movie --lr 1e-3 --weight 1e-4 --epoch 100 >/dev/null 2>&1 &
+✔ nohup python -u main_pretrain_ori.py --dataset gowalla --lr 1e-3 --weight 5e-5 --epoch 500 >/dev/null 2>&1 &
+✔ nohup python -u main_pretrain_ori.py --dataset pinterest --lr 5e-4 --weight 1e-4 --epoch 500 >/dev/null 2>&1 &
+✔ nohup python -u main_pretrain_ori.py --dataset yelp --lr 5e-4 --weight 1e-4 --epoch 500 >/dev/null 2>&1 &
+✔ nohup python -u main_pretrain_ori.py --dataset book --lr 5e-4 --weight 1e-6 --epoch 500 >/dev/null 2>&1 &
+
+负采样 & BPR
+✔ nohup python -u main_pretrain.py --dataset movie --lr 1e-3 --weight 1e-4 --epoch 40 --neg_ratio 8 --bpr_neg_num 4 >/dev/null 2>&1 &
+✔ nohup python -u main_pretrain.py --dataset gowalla --lr 1e-3 --weight 5e-5 --epoch 60 --neg_ratio 36 --bpr_neg_num 4 >/dev/null 2>&1 &
+✔ nohup python -u main_pretrain.py --dataset pinterest --lr 5e-4 --weight 1e-4 --epoch 100 --neg_ratio 8 --bpr_neg_num 4 >/dev/null 2>&1 &
+✔ nohup python -u main_pretrain.py --dataset yelp --lr 5e-4 --weight 1e-4 --epoch 50 --neg_ratio 48 --bpr_neg_num 4 >/dev/null 2>&1 &
+✔ nohup python -u main_pretrain.py --dataset book --lr 5e-4 --weight 1e-6 --epoch 100 --neg_ratio 36 --bpr_neg_num 4 >/dev/null 2>&1 &
+
+正常 quant
+1✔ 2✔ nohup python -u main_quant.py --dataset movie --lr 1e-3 --weight 1e-4 --epoch 1000 >/dev/null 2>&1 &
+1✔ 2✔ nohup python -u main_quant.py --dataset gowalla --lr 1e-3 --weight 5e-5 --epoch 600 >/dev/null 2>&1 &
+1✔ 2✔ nohup python -u main_quant.py --dataset pinterest --lr 5e-4 --weight 1e-4 --epoch 200 >/dev/null 2>&1 &
+1✔ 2✔ nohup python -u main_quant.py --dataset yelp --lr 5e-4 --weight 1e-4 --epoch 400 >/dev/null 2>&1 &
+1✔ 2  nohup python -u main_quant.py --dataset book --lr 5e-4 --weight 1e-6 --epoch 400 >/dev/null 2>&1 &
 
 data_loader: 数据集导入 & train test split & 构建稀疏矩阵
     LoadData类: 封装了用到的所有数据集操作

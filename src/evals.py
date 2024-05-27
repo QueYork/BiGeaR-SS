@@ -59,21 +59,16 @@ def Train_full(dataset, model, epoch, loss_f, neg_ratio=1, summarizer=None):
 
     # 先采样生成一个样本池，一个 epoch 会以 batch 的大小采样来遍历这个样本池
     # 样本池的 size 为 # users，每个 user 取一组 uij
+    # j 个数为 n_neg * K，n_neg 为负采样个数，K 为 K-pair BPR
 
     with utils.timer(name='Sampling'):
-        samples = utils.uniform_sampler(dataset=dataset, neg_ratio=neg_ratio)
+        samples = utils.uniform_sampler(dataset=dataset, neg_ratio=neg_ratio*board.args.bpr_neg_num)
     user_index = torch.Tensor(samples[:, 0]).long()
     pos_item_index = torch.Tensor(samples[:, 1]).long()
-    neg_item_index = torch.Tensor(samples[:, 2]).long()
+    neg_item_index = torch.Tensor(samples[:, 2:]).long()
 
     user_index, pos_item_index, neg_item_index = utils.shuffle(user_index, pos_item_index, neg_item_index)
 
-    # print("*********************************")
-    # print(f"uid: {user_index.shape}")
-    # print(f"pos_iid: {pos_item_index.shape}")
-    # print(f"neg_iid: {neg_item_index.shape}")
-    # print("*********************************")
-    
     user_index = user_index.to(device=board.DEVICE)
     pos_item_index = pos_item_index.to(device=board.DEVICE)
     neg_item_index = neg_item_index.to(device=board.DEVICE)
@@ -82,10 +77,6 @@ def Train_full(dataset, model, epoch, loss_f, neg_ratio=1, summarizer=None):
     num_batch = len(user_index) // board.args.train_batch + 1
     avg_loss = 0.
 
-    # print("*********************************")
-    # print(f"num_batch: {num_batch}")
-    # print("*********************************")
-    
     if board.args.model in ['bgr']:
         batch = utils.minibatch(user_index, pos_item_index, neg_item_index, batch_size=board.args.train_batch)
         for batch_i, (b_user_idx, b_pos_item_idx, b_neg_item_idx) in enumerate(batch):

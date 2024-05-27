@@ -60,7 +60,9 @@ def parse_args():
     parse.add_argument('--norm_a', type=float, default=1., help='normal distribution')                           
     
     # 负采样个数
-    parse.add_argument('--neg_ratio', type=int, default=1, help='the ratio of negative sampling')
+    parse.add_argument('--neg_ratio', type=int, default=8, help='the ratio of negative sampling')
+    
+    parse.add_argument('--bpr_neg_num', type=int, default=1, help='number of negative samples included in K-pair BPR loss function')
     
     parse.add_argument('--eps', type=float, default=1e-20, help='epsilon in gumbel sampling')
     

@@ -64,12 +64,11 @@ def quant():
             info = evals.Train_quant(dataset=dataset, model=model, epoch=epoch, loss_f=loss_f,
                                      neg_ratio=board.args.neg_ratio, summarizer=summarizer)
 
-            if epoch % 10 == 0:
-                board.cprint(f'[testing at epoch-{epoch}]')
-                results = evals.Inference(dataset=dataset, model=model, epoch=epoch, summarizer=summarizer)
+            board.cprint(f'[testing at epoch-{epoch}]')
+            results = evals.Inference(dataset=dataset, model=model, epoch=epoch, summarizer=summarizer)
 
-                logging.info(f'[testing at epoch-{epoch}]')
-                logging.info(results)
+            logging.info(f'[testing at epoch-{epoch}]')
+            logging.info(results)
 
             max_recall20.append(results['recall'][0])
             logging.info(f'EPOCH[{epoch + 1}/{board.args.epoch}] {info} ')

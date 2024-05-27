@@ -40,6 +40,10 @@ class BiGeaR_tch(BasicModel):
         self.item_embed = nn.Embedding(num_embeddings=self.num_items, embedding_dim=self.dim)
         # 论文中的 w_l，第 l 层 embedding 的权重
         self.lambdas = self.compute_concat_scaler()
+        # K-pair BPR
+        self.K = board.args.bpr_neg_num
+        # Negative sample number
+        self.n_negs = board.args.neg_ratio
         
         self.pos_rank = None
         self.neg_rank = None
@@ -59,12 +63,12 @@ class BiGeaR_tch(BasicModel):
         return lambdas
 
     # Embedding aggregation
-    def aggregate_embed(self):
+    def aggregate_embed(self): 
         user_embed = self.user_embed.weight # [#users, dim]
         item_embed = self.item_embed.weight # [#items, dim]
 
         # 连接用户和物品的原始 embedding
-        con_original_embed = torch.cat([user_embed, item_embed]) # [#users + #items, dim]
+        con_original_embed = torch.cat([user_embed, item_embed], dim=0) # [#users + #items, dim]
         # 将乘以第一个缩放因子 self.lambdas[0] 后的原始 embedding 添加到列表中
         con_embed_list = [con_original_embed * self.lambdas[0]] # [1, #users + #items, dim]
 
@@ -73,46 +77,97 @@ class BiGeaR_tch(BasicModel):
             con_original_embed = torch.sparse.mm(self.Graph, con_original_embed) # [#users + #items, dim]
             # 将下一层 * 缩放因子后加入列表
             con_embed_list.append(con_original_embed * self.lambdas[layer + 1]) # [1 + layer, #users + #items, dim]
-
-        # 将列表中的 embedding 横向连接起来，embedding 长度变为 (1 + num_layer) * dim 
-        con_origin_output = torch.cat(con_embed_list, dim=1) # [#users + #items, (1 + num_layer) * dim]
-        # split 用户和物品
-        con_origin_users_embed, con_origin_items_embed = torch.split(con_origin_output,
-                                                                     [self.num_users, self.num_items])
-        return con_origin_users_embed, con_origin_items_embed # [#users, (1 + num_layer) * dim], [#items, (1 + num_layer) * dim]
-
+        
+        con_embed_list = torch.stack(con_embed_list, dim=1)
+        return con_embed_list[:self.num_users, :], con_embed_list[self.num_users:, :] # [n_entity, num_layer + 1, dim]
+    
+    def pooling(self, embed: torch.Tensor):
+        return embed.view(embed.shape[:-2] + (-1,)) 
+    
     def _BPR_loss(self, user_embed, pos_embed, neg_embed):
         pos_scores = torch.mul(user_embed, pos_embed)
         pos_scores = torch.sum(pos_scores, dim=1)
-        neg_scores = torch.mul(user_embed, neg_embed)
-        neg_scores = torch.sum(neg_scores, dim=1)
-        loss = torch.mean(torch.nn.functional.softplus(neg_scores - pos_scores))
+        # neg_scores = torch.mul(user_embed, neg_embed)
+        # neg_scores = torch.sum(neg_scores, dim=1)
+        # loss = torch.mean(torch.nn.functional.softplus(neg_scores - pos_scores))
+        
+        neg_scores = torch.sum(torch.mul(user_embed.unsqueeze(dim=1), neg_embed), axis=-1)  # [batch_size, K]
+        loss = torch.mean(torch.log(1+torch.exp(neg_scores - pos_scores.unsqueeze(dim=1)).sum(dim=1)))
         return loss
 
+    def negative_synthesizing(self, con_origin_user_embed, con_origin_item_embed, user_index, neg_candidates, pos_item):
+        batch_size = user_index.shape[0]
+        u_e, p_e = con_origin_user_embed[user_index], con_origin_item_embed[pos_item]
+        
+        """positive mixing"""
+        seed = torch.rand(batch_size, 1, p_e.shape[1], 1).to(p_e.device)
+        
+        # 负样本池
+        n_e = con_origin_item_embed[neg_candidates]  # [batch_size, n_negs, (1 + num_layer) * dim]
+    
+        # 对负样本池的所有样本执行正混合
+        n_e_ = seed * p_e.unsqueeze(dim=1) + (1 - seed) * n_e  # mixing
+        
+        
+        """hop mixing""" # 从负样本池中筛选出每一层的embedding, 合成一个负样本输出
+        # 筛选策略：对每一层，找到使得 当层用户embedding * 当层负样本 embedding 最大的那个 embedding
+        
+        scores = (u_e.unsqueeze(dim=1) * n_e_).sum(dim=-1)  # [batch_size, n_negs, num_layer+1]
+        indices = torch.max(scores, dim=1)[1].detach()
+        neg_items_emb_ = n_e_.permute([0, 2, 1, 3])  # [batch_size, num_layer+1, n_negs, dim]
+        
+        # [batch_size, (1 + num_layer), dim]
+        return neg_items_emb_[[[i] for i in range(batch_size)], range(neg_items_emb_.shape[1]), indices, :]
+    
     def loss(self, user_index, pos_index, neg_index):
-        # ✔ TODO: 原版采样器不采负样本，节约运行时间   Comment: 使用老采样器采 neg_ratio 个负样本创建负样本池，neg_ratio ∈ [16, 32, 64, 128]
-        # TODO: 在这个函数里合成负样本，在 aggregate_embed 得到 con_origin_item_embed 之后操作
-        # TODO: 合成后维护好正常的 loss 计算流程
-        # TODO: 尝试 K-pair BPR loss
-        user_con_embed = self.user_embed(user_index)
-        pos_con_embed = self.item_embed(pos_index)
-        neg_con_embed = self.item_embed(neg_index)
-
-        con_origin_user_embed, con_origin_item_embed = self.aggregate_embed()
-
-        con_origin_user_agg_embed = con_origin_user_embed[user_index]
-        con_origin_pos_agg_embed = con_origin_item_embed[pos_index]
-        con_origin_neg_agg_embed = con_origin_item_embed[neg_index]
-
-        reg_loss = (1 / 2) * (user_con_embed.norm(2).pow(2) +
-                              pos_con_embed.norm(2).pow(2) +
-                              neg_con_embed.norm(2).pow(2)) / float(len(user_index))
-
-        loss1 = self._BPR_loss(con_origin_user_agg_embed, con_origin_pos_agg_embed, con_origin_neg_agg_embed)
+        # ✔ TODO: 原版采样器不采负样本，节约运行时间   Comment: 使用老采样器采 neg_ratio 个负样本创建负样本池
+        # ✔ TODO: 合成负样本                         Comment: 最佳负样本采样数 = 8 (测了 1，2，4，8，16，32)
+        # ✔ TODO: 合成后维护好正常的 loss 计算流程    Comment: 正则化 loss 原本使用 ori_emb 计算，现在换成了 agg_emb
+        # ✔ TODO: 尝试 K-pair BPR loss              Comment: 最佳 K = 4
+        # TODO: 将负样本合成和 K-pair loss 移植给 quant train
+        
+        user_emb, item_emb = self.aggregate_embed()
+        
+        # 池化前的 embedding
+        # u_e: [batch_size, (1 + num_layer), dim]
+        # pos_e: [batch_size, (1 + num_layer), dim]
+        # neg_e: [batch_size, K, (1 + num_layer), dim]
+        nocon_u_e = user_emb[user_index]
+        nocon_pos_e = item_emb[pos_index]
+        nocon_neg_e = []
+        for k in range(self.K):
+            nocon_neg_e.append(self.negative_synthesizing(user_emb, 
+                                                    item_emb, 
+                                                    user_index, 
+                                                    neg_index[:, k*self.n_negs: (k+1)*self.n_negs], 
+                                                    pos_index))
+        nocon_neg_e = torch.stack(nocon_neg_e, dim=1)
+        
+        # 池化后的 embedding
+        # u_e: [batch_size, (1 + num_layer) * dim]
+        # pos_e: [batch_size, (1 + num_layer) * dim]
+        # neg_e: [batch_size, K, (1 + num_layer) * dim]
+        user_emb = self.pooling(user_emb)
+        item_emb = self.pooling(item_emb)
+        
+        u_e = user_emb[user_index]
+        pos_e = item_emb[pos_index]
+        neg_e = self.pooling(nocon_neg_e)
+        
+        # 正则化使用 layer_idx = 0 计算
+        reg_loss = 0.5 * (torch.norm(nocon_u_e[:, 0, :]) ** 2
+                       + torch.norm(nocon_pos_e[:, 0, :]) ** 2
+                       + torch.norm(nocon_neg_e[:, :, 0, :]) ** 2) / float(len(user_index))
+        
+        loss1 = self._BPR_loss(u_e, pos_e, neg_e)
         return loss1, reg_loss
 
     def get_scores(self, user_index):
         all_user_embed, all_item_embed = self.aggregate_embed()
+        
+        all_user_embed = self.pooling(all_user_embed)
+        all_item_embed = self.pooling(all_item_embed)
+        
         user_embed = all_user_embed[user_index.long()]
         scores = self.f(torch.matmul(user_embed, all_item_embed.t()))
         return scores
@@ -332,15 +387,13 @@ class BiGeaR(BasicModel):
             bin_quant_embed = self.quant_layer(con_original_embed)
             bin_quant_list.append(bin_quant_embed * self.lambdas[layer + 1])
 
-        con_origin_output = torch.cat(con_embed_list, dim=1)
-        bin_quant_output = torch.cat(bin_quant_list, dim=1)
+        con_embed_list = torch.stack(con_embed_list, dim=1)
+        bin_quant_list = torch.stack(bin_quant_list, dim=1)
+        return con_embed_list[:self.num_users, :], con_embed_list[self.num_users:, :], bin_quant_list[:self.num_users, :], bin_quant_list[self.num_users:, :]
 
-        con_origin_users_embed, con_origin_items_embed = torch.split(con_origin_output,
-                                                                     [self.num_users, self.num_items])
-        bin_quant_users_embed, bin_quant_items_embed = torch.split(bin_quant_output, [self.num_users, self.num_items])
-
-        return con_origin_users_embed, con_origin_items_embed, bin_quant_users_embed, bin_quant_items_embed
-
+    def pooling(self, embed: torch.Tensor):
+        return embed.view(embed.shape[:-2] + (-1,)) 
+    
     def _BPR_loss(self, user_embed, pos_embed, neg_embed):
         pos_scores = torch.mul(user_embed, pos_embed)
         pos_scores = torch.sum(pos_scores, dim=1)
@@ -381,6 +434,9 @@ class BiGeaR(BasicModel):
 
         con_origin_user_embed, con_origin_item_embed, \
         bin_quant_user_embed, bin_quant_item_embed = self.aggregate_embed_std()
+        
+        bin_quant_user_embed = self.pooling(bin_quant_user_embed)
+        bin_quant_item_embed = self.pooling(bin_quant_item_embed)
 
         bin_quant_user_agg_embed = bin_quant_user_embed[user_index]
         bin_quant_pos_agg_embed = bin_quant_item_embed[pos_index]
@@ -396,6 +452,10 @@ class BiGeaR(BasicModel):
 
     def get_scores(self, user_index):
         _, _, bin_all_user_embed, bin_all_item_embed = self.aggregate_embed_std()
+        
+        bin_all_user_embed = self.pooling(bin_all_user_embed)
+        bin_all_item_embed = self.pooling(bin_all_item_embed)
+        
         user_embed = bin_all_user_embed[user_index.long()]
         scores = torch.matmul(user_embed, bin_all_item_embed.t())
         return scores
