@@ -66,7 +66,8 @@ def parse_args():
     
     parse.add_argument('--eps', type=float, default=1e-20, help='epsilon in gumbel sampling')
     
-    
+    # It regulates the overall inclination of the synthesized hard negative examples to approach the positive examples.
+    parse.add_argument("--alpha", type=float, default='0.5', help="Control the trend of the model to positive contributation")
     
     # ArgumentParser 通过 parse_args() 方法解析参数，获取到命令行中输入的参数，需在命令行中进行调用才可正常运行
     return parse.parse_args() 

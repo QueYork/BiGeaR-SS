@@ -38,12 +38,14 @@ class BiGeaR_tch(BasicModel):
         # 用户和物品的原始 embedding
         self.user_embed = nn.Embedding(num_embeddings=self.num_users, embedding_dim=self.dim)
         self.item_embed = nn.Embedding(num_embeddings=self.num_items, embedding_dim=self.dim)
-        # 论文中的 w_l，第 l 层 embedding 的权重
+        # BiGeaR 论文中的 w_l，第 l 层 embedding 的权重
         self.lambdas = self.compute_concat_scaler()
         # K-pair BPR
         self.K = board.args.bpr_neg_num
         # Negative sample number
         self.n_negs = board.args.neg_ratio
+        # DINS 论文中的 β
+        self.alpha = board.args.alpha
         
         self.pos_rank = None
         self.neg_rank = None
@@ -95,37 +97,58 @@ class BiGeaR_tch(BasicModel):
         loss = torch.mean(torch.log(1+torch.exp(neg_scores - pos_scores.unsqueeze(dim=1)).sum(dim=1)))
         return loss
 
+    # MixGCF 负样本合成
+
+    # def negative_synthesizing(self, con_origin_user_embed, con_origin_item_embed, user_index, neg_candidates, pos_item):
+    #     batch_size = user_index.shape[0]
+    #     u_e, p_e = con_origin_user_embed[user_index], con_origin_item_embed[pos_item]
+        
+    #     """positive mixing"""
+    #     seed = torch.rand(batch_size, 1, p_e.shape[1], 1).to(p_e.device)
+        
+    #     # 负样本池
+    #     n_e = con_origin_item_embed[neg_candidates]  # [batch_size, n_negs, (1 + num_layer) * dim]
+    
+    #     # 对负样本池的所有样本执行正混合
+    #     n_e_ = seed * p_e.unsqueeze(dim=1) + (1 - seed) * n_e  # mixing
+        
+        
+    #     """hop mixing""" # 从负样本池中筛选出每一层的embedding, 合成一个负样本输出
+    #     # 筛选策略：对每一层，找到使得 当层用户embedding * 当层负样本 embedding 最大的那个 embedding
+        
+    #     scores = (u_e.unsqueeze(dim=1) * n_e_).sum(dim=-1)  # [batch_size, n_negs, num_layer+1]
+    #     indices = torch.max(scores, dim=1)[1].detach()
+    #     neg_items_emb_ = n_e_.permute([0, 2, 1, 3])  # [batch_size, num_layer+1, n_negs, dim]
+        
+    #     # [batch_size, (1 + num_layer), dim]
+    #     return neg_items_emb_[[[i] for i in range(batch_size)], range(neg_items_emb_.shape[1]), indices, :]
+    
+    
+    # DINS 负样本合成
+    
     def negative_synthesizing(self, con_origin_user_embed, con_origin_item_embed, user_index, neg_candidates, pos_item):
         batch_size = user_index.shape[0]
         u_e, p_e = con_origin_user_embed[user_index], con_origin_item_embed[pos_item]
         
-        """positive mixing"""
-        seed = torch.rand(batch_size, 1, p_e.shape[1], 1).to(p_e.device)
+        """Hard Boundary Definition"""
+        n_e = con_origin_item_embed[neg_candidates] # [batch_size, n_negs, (1 + num_layer), dim]
+        scores = (u_e.unsqueeze(dim=1) * n_e).sum(dim=-1)  # [batch_size, n_negs, (1 + num_layer)]
+        indices = torch.max(scores, dim=1)[1].detach()  
+        neg_items_emb_ = n_e.permute([0, 2, 1, 3])  # [batch_size, (1 + num_layer), n_negs, dim]
+        neg_items_embedding_hardest = neg_items_emb_[[[i] for i in range(batch_size)], 
+                                                     range(neg_items_emb_.shape[1]), 
+                                                     indices, :]   # [batch_size, num_layer+1, dim]
         
-        # 负样本池
-        n_e = con_origin_item_embed[neg_candidates]  # [batch_size, n_negs, (1 + num_layer) * dim]
+        """Dimension Independent Mixup"""
+        neg_scores = torch.exp(u_e * neg_items_embedding_hardest) 
+        total_sum = self.alpha * torch.exp ((u_e * p_e)) + neg_scores   
+        neg_weight = neg_scores / total_sum  
+        pos_weight = 1 - neg_weight   
+
+        return pos_weight * p_e + neg_weight * neg_items_embedding_hardest  # mixing
     
-        # 对负样本池的所有样本执行正混合
-        n_e_ = seed * p_e.unsqueeze(dim=1) + (1 - seed) * n_e  # mixing
-        
-        
-        """hop mixing""" # 从负样本池中筛选出每一层的embedding, 合成一个负样本输出
-        # 筛选策略：对每一层，找到使得 当层用户embedding * 当层负样本 embedding 最大的那个 embedding
-        
-        scores = (u_e.unsqueeze(dim=1) * n_e_).sum(dim=-1)  # [batch_size, n_negs, num_layer+1]
-        indices = torch.max(scores, dim=1)[1].detach()
-        neg_items_emb_ = n_e_.permute([0, 2, 1, 3])  # [batch_size, num_layer+1, n_negs, dim]
-        
-        # [batch_size, (1 + num_layer), dim]
-        return neg_items_emb_[[[i] for i in range(batch_size)], range(neg_items_emb_.shape[1]), indices, :]
     
     def loss(self, user_index, pos_index, neg_index):
-        # ✔ TODO: 原版采样器不采负样本，节约运行时间   Comment: 使用老采样器采 neg_ratio 个负样本创建负样本池
-        # ✔ TODO: 合成负样本                         Comment: 最佳负样本采样数 = 8 (测了 1，2，4，8，16，32)
-        # ✔ TODO: 合成后维护好正常的 loss 计算流程    Comment: 正则化 loss 原本使用 ori_emb 计算，现在换成了 agg_emb
-        # ✔ TODO: 尝试 K-pair BPR loss              Comment: 最佳 K = 4
-        # TODO: 将负样本合成和 K-pair loss 移植给 quant train
-        
         user_emb, item_emb = self.aggregate_embed()
         
         # 池化前的 embedding
