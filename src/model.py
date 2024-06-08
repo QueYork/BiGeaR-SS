@@ -332,6 +332,8 @@ class BiGeaR(BasicModel):
 
         self.Graph = self.dataset.load_sparse_graph()
 
+        self.alpha = board.args.alpha
+
         self.compute_rank = board.args.compute_rank
         if self.compute_rank == 1:
             self.pos_rank_tch, self.neg_rank_tch = self.get_tch_rank()
@@ -450,28 +452,102 @@ class BiGeaR(BasicModel):
         rd_loss = torch.stack(rd_loss, dim=0)
         return rd_loss
 
-    def loss(self, user_index, pos_index, neg_index):
-        user_con_embed = self.user_embed_std(user_index)
-        pos_con_embed = self.item_embed_std(pos_index)
-        neg_con_embed = self.item_embed_std(neg_index)
+    # MixGCF 负样本合成
 
-        con_origin_user_embed, con_origin_item_embed, \
-        bin_quant_user_embed, bin_quant_item_embed = self.aggregate_embed_std()
+    # def negative_synthesizing(self, con_origin_user_embed, con_origin_item_embed, user_index, neg_candidates, pos_item):
+    #     batch_size = user_index.shape[0]
+    #     u_e, p_e = con_origin_user_embed[user_index], con_origin_item_embed[pos_item]
         
-        bin_quant_user_embed = self.pooling(bin_quant_user_embed)
-        bin_quant_item_embed = self.pooling(bin_quant_item_embed)
+    #     """positive mixing"""
+    #     seed = torch.rand(batch_size, 1, p_e.shape[1], 1).to(p_e.device)
+        
+    #     # 负样本池
+    #     n_e = con_origin_item_embed[neg_candidates]  # [batch_size, n_negs, (1 + num_layer) * dim]
+    
+    #     # 对负样本池的所有样本执行正混合
+    #     n_e_ = seed * p_e.unsqueeze(dim=1) + (1 - seed) * n_e  # mixing
+        
+        
+    #     """hop mixing""" # 从负样本池中筛选出每一层的embedding, 合成一个负样本输出
+    #     # 筛选策略：对每一层，找到使得 当层用户embedding * 当层负样本 embedding 最大的那个 embedding
+        
+    #     scores = (u_e.unsqueeze(dim=1) * n_e_).sum(dim=-1)  # [batch_size, n_negs, num_layer+1]
+    #     indices = torch.max(scores, dim=1)[1].detach()
+    #     neg_items_emb_ = n_e_.permute([0, 2, 1, 3])  # [batch_size, num_layer+1, n_negs, dim]
+        
+    #     # [batch_size, (1 + num_layer), dim]
+    #     return neg_items_emb_[[[i] for i in range(batch_size)], range(neg_items_emb_.shape[1]), indices, :]
+    
 
-        bin_quant_user_agg_embed = bin_quant_user_embed[user_index]
-        bin_quant_pos_agg_embed = bin_quant_item_embed[pos_index]
-        bin_quant_neg_agg_embed = bin_quant_item_embed[neg_index]
+    # DINS 负样本合成
+    
+    def negative_synthesizing(self, con_origin_user_embed, con_origin_item_embed, user_index, neg_candidates, pos_item):
+        batch_size = user_index.shape[0]
+        u_e, p_e = con_origin_user_embed[user_index], con_origin_item_embed[pos_item]
+        
+        """Hard Boundary Definition"""
+        n_e = con_origin_item_embed[neg_candidates] # [batch_size, n_negs, (1 + num_layer), dim]
+        scores = (u_e.unsqueeze(dim=1) * n_e).sum(dim=-1)  # [batch_size, n_negs, (1 + num_layer)]
+        indices = torch.max(scores, dim=1)[1].detach()  
+        neg_items_emb_ = n_e.permute([0, 2, 1, 3])  # [batch_size, (1 + num_layer), n_negs, dim]
+        neg_items_embedding_hardest = neg_items_emb_[[[i] for i in range(batch_size)], 
+                                                     range(neg_items_emb_.shape[1]), 
+                                                     indices, :]   # [batch_size, num_layer+1, dim]
+        
+        """Dimension Independent Mixup"""
+        neg_scores = torch.exp(u_e * neg_items_embedding_hardest) 
+        total_sum = self.alpha * torch.exp ((u_e * p_e)) + neg_scores   
+        neg_weight = neg_scores / total_sum  
+        pos_weight = 1 - neg_weight   
 
-        reg_loss = 0.5 * (user_con_embed.norm(2).pow(2) +
-                          pos_con_embed.norm(2).pow(2) +
-                          neg_con_embed.norm(2).pow(2)) / float(len(user_index))
+        return pos_weight * p_e + neg_weight * neg_items_embedding_hardest  # mixing
 
-        loss1 = self._BPR_loss(bin_quant_user_agg_embed, bin_quant_pos_agg_embed, bin_quant_neg_agg_embed)
-        loss2 = self._ID_loss(user_index, bin_quant_user_embed, bin_quant_item_embed)
+    def loss(self, user_index, pos_index, neg_index):
+        full_user_emb, full_item_emb, \
+        bin_user_emb, bin_item_emb = self.aggregate_embed_std()
+
+        bin_neg_e = self.negative_synthesizing(bin_user_emb, bin_item_emb, user_index, neg_index, pos_index)
+        
+        bin_user_emb = self.pooling(bin_user_emb)
+        bin_item_emb = self.pooling(bin_item_emb)
+        
+        u_e = bin_user_emb[user_index]
+        pos_e = bin_item_emb[pos_index]
+        neg_e = self.pooling(bin_neg_e)
+        
+        loss1 = self._BPR_loss(u_e, pos_e, neg_e)
+        loss2 = self._ID_loss(user_index, bin_user_emb, bin_item_emb)
+    
+        reg_loss = 0.5 * (self.user_embed_std(user_index).norm(2).pow(2) +
+                          self.item_embed_std(pos_index).norm(2).pow(2) +
+                          self.item_embed_std(neg_index).norm(2).pow(2)) / float(len(user_index))
+        
         return loss1, loss2, reg_loss
+
+
+
+    # def loss(self, user_index, pos_index, neg_index):
+    #     user_con_embed = self.user_embed_std(user_index)
+    #     pos_con_embed = self.item_embed_std(pos_index)
+    #     neg_con_embed = self.item_embed_std(neg_index)
+
+    #     con_origin_user_embed, con_origin_item_embed, \
+    #     bin_quant_user_embed, bin_quant_item_embed = self.aggregate_embed_std()
+        
+    #     bin_quant_user_embed = self.pooling(bin_quant_user_embed)
+    #     bin_quant_item_embed = self.pooling(bin_quant_item_embed)
+
+    #     bin_quant_user_agg_embed = bin_quant_user_embed[user_index]
+    #     bin_quant_pos_agg_embed = bin_quant_item_embed[pos_index]
+    #     bin_quant_neg_agg_embed = bin_quant_item_embed[neg_index]
+
+    #     reg_loss = 0.5 * (user_con_embed.norm(2).pow(2) +
+    #                       pos_con_embed.norm(2).pow(2) +
+    #                       neg_con_embed.norm(2).pow(2)) / float(len(user_index))
+
+    #     loss1 = self._BPR_loss(bin_quant_user_agg_embed, bin_quant_pos_agg_embed, bin_quant_neg_agg_embed)
+    #     loss2 = self._ID_loss(user_index, bin_quant_user_embed, bin_quant_item_embed)
+    #     return loss1, loss2, reg_loss
 
     def get_scores(self, user_index):
         _, _, bin_all_user_embed, bin_all_item_embed = self.aggregate_embed_std()

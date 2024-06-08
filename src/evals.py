@@ -43,7 +43,7 @@ class BGRLoss_quant:
         loss1, loss2_i, reg_loss = self.model.loss(user_index, pos_index, neg_index)
         loss2 = torch.mean(loss2_i, dim=0)
         loss = loss1 + loss2
-
+        # loss = loss1
         reg_loss *= self.weight_decay
         loss += reg_loss
 
@@ -104,7 +104,7 @@ def Train_quant(dataset, model, epoch, loss_f, neg_ratio=1, summarizer=None):
         samples = utils.uniform_sampler(dataset=dataset, neg_ratio=neg_ratio)
     user_index = torch.Tensor(samples[:, 0]).long()
     pos_item_index = torch.Tensor(samples[:, 1]).long()
-    neg_item_index = torch.Tensor(samples[:, 2]).long()
+    neg_item_index = torch.Tensor(samples[:, 2:]).long()
 
     user_index, pos_item_index, neg_item_index = utils.shuffle(user_index, pos_item_index, neg_item_index)
 
