@@ -12,7 +12,6 @@ ROOT = join(PATH, '../')
 sys.path.append(ROOT)
 
 from torch.utils.tensorboard import SummaryWriter
-# from tensorboardX import SummaryWriter
 import src.data_loader as data_loader
 import datetime
 import pytz

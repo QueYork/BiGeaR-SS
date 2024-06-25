@@ -39,11 +39,10 @@ class BGRLoss_quant:
         self.lr = board.args.lr
         self.opt = optim.Adam(model.parameters(), lr=self.lr)
 
-    def stage(self, user_index, pos_index, neg_index):
+    def stage(self, user_index, pos_index, neg_index, weight):
         loss1, loss2_i, reg_loss = self.model.loss(user_index, pos_index, neg_index)
         loss2 = torch.mean(loss2_i, dim=0)
         loss = loss1 + loss2
-        # loss = loss1
         reg_loss *= self.weight_decay
         loss += reg_loss
 
@@ -120,7 +119,9 @@ def Train_quant(dataset, model, epoch, loss_f, neg_ratio=1, summarizer=None):
 
     batch = utils.minibatch(user_index, pos_item_index, neg_item_index, batch_size=board.args.train_batch)
     for batch_i, (b_user_idx, b_pos_item_idx, b_neg_item_idx) in enumerate(batch):
-        loss_all_i, loss1_i, loss2_i, rd_loss_details = loss_f.stage(b_user_idx, b_pos_item_idx, b_neg_item_idx)
+        weight = torch.sigmoid(torch.tensor(-epoch/100.0)).to(board.DEVICE)
+        
+        loss_all_i, loss1_i, loss2_i, rd_loss_details = loss_f.stage(b_user_idx, b_pos_item_idx, b_neg_item_idx, weight)
         avg_loss += loss_all_i
         loss1 += loss1_i
         loss2 += loss2_i

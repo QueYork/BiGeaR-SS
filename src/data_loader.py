@@ -88,6 +88,9 @@ class LoadData(Dataset):
 
         # pre-process
         self.all_pos = self._get_user_posItems(list(range(self.n_users)))
+        # 找 all_neg
+        self.all_neg = self._get_user_negItems(list(range(self.n_users)))
+        
         self.test_dict = self._build_test()
         print(f"{self.data_name} is loaded")
 
@@ -105,6 +108,9 @@ class LoadData(Dataset):
 
     def get_all_pos(self):
         return self.all_pos
+    
+    def get_all_neg(self):
+        return self.all_neg
 
     def _build_test(self):
         """
@@ -125,6 +131,13 @@ class LoadData(Dataset):
         for user in user_index:
             pos_items.append(self.user_item_net[user].nonzero()[1])
         return pos_items
+
+    def _get_user_negItems(self, user_index):
+        neg_items = []
+        for user in user_index:
+            all_items = np.arange(self.m_items)
+            neg_items.append(np.setdiff1d(all_items, self.all_pos[user], assume_unique=True))
+        return neg_items
 
     def _convert_sp_mat_to_sp_tensor(self, matrix):
         """

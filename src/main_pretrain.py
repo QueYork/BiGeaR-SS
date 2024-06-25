@@ -14,7 +14,6 @@ ROOT = join(PATH, '../')
 sys.path.append(ROOT)
 
 from torch.utils.tensorboard import SummaryWriter
-# from tensorboardX import SummaryWriter
 import src.data_loader as data_loader
 import datetime
 import pytz
@@ -74,7 +73,7 @@ def pretrain():
 
             logging.info(f'EPOCH[{epoch + 1}/{board.args.epoch}] {info} ')
             
-            # 保存最佳参数
+            # Save optimal model
             if max_recall20 < results['recall'][0]:
                 max_recall20 = results['recall'][0]
                 logging.info(f'Summary at recall = {max_recall20}')
@@ -83,13 +82,13 @@ def pretrain():
                     file = f"{board.args.model}-{board.args.dataset}-{board.args.dim}-rank.pth.tar"
                     weight_file = os.path.join(board.FILE_PATH, file)
 
-                    if board.args.dataset in board.batch_ranking_list:
-                        model.summary_forOOM()
-                    else:
-                        model.summary()
+                    model.summary()
+                    
                     torch.save({'RP_embed': model.RP_embed,
                                 'pos_rank_LW': model.pos_rank,
-                                'neg_rank_LW': model.neg_rank},
+                                'neg_rank_LW': model.neg_rank,
+                                'hard_rank_LW': model.hard_neg_rank  
+                                },      
                                weight_file)
                 else:
                     file = f"{board.args.model}-{board.args.dataset}-{board.args.bin_dim}.pth.tar"

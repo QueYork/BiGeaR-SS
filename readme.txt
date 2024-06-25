@@ -1,21 +1,18 @@
 ps -ef | grep tensorboard | awk '{print $2}' | xargs kill -9 
 tensorboard --port 6007 --logdir /root/bigear/src/results/
 
-MixGCF
-nohup python -u main_pretrain.py --dataset movie --lr 1e-3 --weight 1e-4 --epoch 40 --neg_ratio 8 --bpr_neg_num 4 >/dev/null 2>&1 &
-nohup python -u main_pretrain.py --dataset gowalla --lr 1e-3 --weight 5e-5 --epoch 60 --neg_ratio 36 --bpr_neg_num 4 >/dev/null 2>&1 &
-nohup python -u main_pretrain.py --dataset pinterest --lr 5e-4 --weight 1e-4 --epoch 100 --neg_ratio 8 --bpr_neg_num 4 >/dev/null 2>&1 &
-nohup python -u main_pretrain.py --dataset yelp --lr 5e-4 --weight 1e-4 --epoch 50 --neg_ratio 48 --bpr_neg_num 4 >/dev/null 2>&1 &
-nohup python -u main_pretrain.py --dataset book --lr 5e-4 --weight 1e-6 --epoch 100 --neg_ratio 36 --bpr_neg_num 1 >/dev/null 2>&1 &
-
-DINS
-nohup python -u main_pretrain.py --dataset movie --lr 1e-3 --weight 1e-4 --epoch 100 --alpha 2 --neg_ratio 8 --bpr_neg_num 5 >/dev/null 2>&1 &
+负采样 & BPR
+nohup python -u main_pretrain.py --dataset movie --lr 1e-3 --weight 1e-4 --epoch 40 --neg_ratio 8 --bpr_neg_num 5 --alpha 2 --N 50 >/dev/null 2>&1 &
+nohup python -u main_pretrain.py --dataset gowalla --lr 1e-3 --weight 5e-5 --epoch 20 --neg_ratio 20 --bpr_neg_num 4 --alpha 0.3 --N 100 >/dev/null 2>&1 &
+nohup python -u main_pretrain.py --dataset pinterest --lr 5e-4 --weight 1e-4 --epoch 25 --neg_ratio 32 --bpr_neg_num 12 --alpha 0.7 --N 25 >/dev/null 2>&1 &
+nohup python -u main_pretrain.py --dataset yelp --lr 5e-4 --weight 1e-4 --epoch 50 --neg_ratio 42 --bpr_neg_num 4 --alpha 0.1 --N 25 >/dev/null 2>&1 &
+nohup python -u main_pretrain.py --dataset book --lr 5e-4 --weight 1e-6 --epoch 100 --neg_ratio 36 --bpr_neg_num 4 >/dev/null 2>&1 &
 
 正常 quant
-nohup python -u main_quant.py --dataset movie --lr 1e-3 --weight 1e-4 --epoch 1000 >/dev/null 2>&1 &
-nohup python -u main_quant.py --dataset gowalla --lr 1e-3 --weight 5e-5 --epoch 600 >/dev/null 2>&1 &
-nohup python -u main_quant.py --dataset pinterest --lr 5e-4 --weight 1e-4 --epoch 200 >/dev/null 2>&1 &
-nohup python -u main_quant.py --dataset yelp --lr 5e-4 --weight 1e-4 --epoch 400 >/dev/null 2>&1 &
+nohup python -u main_quant.py --dataset movie --lr 1e-3 --weight 1e-4 --alpha 0.5 --neg_ratio 2 --N 50 --epoch 1000 >/dev/null 2>&1 &
+nohup python -u main_quant.py --dataset gowalla --lr 1e-3 --weight 5e-5 --epoch 1000 --alpha 0.1 --neg_ratio 4 --N 25 >/dev/null 2>&1 &
+nohup python -u main_quant.py --dataset pinterest --lr 5e-4 --weight 1e-4 --epoch 60 --N 25 --neg_ratio 16 --alpha 0.5 >/dev/null 2>&1 &
+nohup python -u main_quant.py --dataset yelp --lr 5e-4 --weight 1e-4 --epoch 400 --N 25 --neg_ratio 4 --alpha 0.1 >/dev/null 2>&1 &
 nohup python -u main_quant.py --dataset book --lr 5e-4 --weight 1e-6 --epoch 400 >/dev/null 2>&1 &
 
 data_loader: 数据集导入 & train test split & 构建稀疏矩阵
