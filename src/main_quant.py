@@ -1,7 +1,7 @@
 """
-@author:chenyankai
+@author:chenyankai, queyue
 @file:main.py
-@time:2021/11/11
+@time:2024/6/28
 """
 import os
 import sys
@@ -12,6 +12,7 @@ ROOT = join(PATH, '../')
 sys.path.append(ROOT)
 
 from torch.utils.tensorboard import SummaryWriter
+# from tensorboardX import SummaryWriter
 import src.data_loader as data_loader
 import datetime
 import pytz

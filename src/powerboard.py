@@ -1,7 +1,7 @@
 """
-@author:chenyankai
+@author:chenyankai, queyue
 @file:powerboard.py
-@time:2021/11/11
+@time:2024/6/28
 """
 import os
 import sys
@@ -13,7 +13,7 @@ from pprint import pprint
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 args = parse_args()
 CODE_PATH = os.path.dirname(os.path.abspath(__file__))
-DATA_PATH = join(CODE_PATH, '../../autodl-tmp/dataset')
+DATA_PATH = join(CODE_PATH, '../dataset')
 C_SOURCE_PATH = join(CODE_PATH, 'sources')
 BOARD_PATH = join(CODE_PATH, 'results')
 FILE_PATH = join(CODE_PATH, 'checkpoints')
@@ -24,7 +24,7 @@ if not os.path.exists(FILE_PATH):
 
 
 all_dataset = ['gowalla', 'yelp', 'book', 'movie', 'pinterest']
-batch_ranking_list = ['book']
+batch_ranking_list = []
 all_model = ['bgr']
 GPU = torch.cuda.is_available()
 SEED = args.seed

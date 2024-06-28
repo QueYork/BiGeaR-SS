@@ -1,7 +1,7 @@
 """
-@author:chenyankai
+@author:chenyankai, queyue
 @file:data_loader.py
-@time:2021/11/11
+@time:2024/6/28
 """
 import os
 from os.path import join
@@ -88,7 +88,7 @@ class LoadData(Dataset):
 
         # pre-process
         self.all_pos = self._get_user_posItems(list(range(self.n_users)))
-        # 找 all_neg
+        # all_neg
         self.all_neg = self._get_user_negItems(list(range(self.n_users)))
         
         self.test_dict = self._build_test()

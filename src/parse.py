@@ -1,13 +1,13 @@
 """
-@author:chenyankai
+@author:chenyankai, queyue
 @file:parse.py
-@time:2021/11/10
+@time:2024/6/28
 """
 import argparse
 
 def parse_args():
     parse = argparse.ArgumentParser(description='Lossless')
-    
+
     parse.add_argument('--dataset', type=str, default='movie', help='accessible datasets from [movie, gowalla, yelp, book, pinterest]')
     parse.add_argument('--topks', nargs='+', type=int, default=[20, 100], help='top@k test list')      
     parse.add_argument('--train_file', type=str, default='train.txt')
@@ -17,7 +17,7 @@ def parse_args():
     parse.add_argument('--layers', type=int, default=2, help='the layer number')
     parse.add_argument('--dim', type=int, default=256, help='embedding dimension')
     parse.add_argument('--lr', type=float, default=0.001, help='learning rate')
-    parse.add_argument('--weight', type=float, default=1e-4, help='the weight of l2 norm')
+    parse.add_argument('--weight', type=float, default=1e-4, help='the weight of l2 norm')     
     parse.add_argument('--tensorboard', type=bool, default=True, help='enable tensorboard')
     parse.add_argument('--epoch', type=int, default=20)
     parse.add_argument('--seed', type=int, default=2021, help='random seed')
@@ -31,6 +31,6 @@ def parse_args():
     parse.add_argument('--neg_ratio', type=int, default=8, help='the ratio of negative sampling')
     parse.add_argument('--bpr_neg_num', type=int, default=1, help='number of negative samples included in K-pair BPR loss function')
     parse.add_argument('--eps', type=float, default=1e-20, help='epsilon in gumbel sampling')
-    parse.add_argument("--alpha", type=float, default='0.5', help="Control the trend of the model to positive contributation")
+    parse.add_argument("--reg", type=float, default='1.0', help="Control the extent of positive mixing")
     
     return parse.parse_args() 

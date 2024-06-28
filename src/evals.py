@@ -1,7 +1,7 @@
 """
-@author:chenyankai
+@author:chenyankai, queyue
 @file:evals.py
-@time:2021/11/11
+@time:2024/6/28
 """
 import src.powerboard as board
 import numpy as np
@@ -9,7 +9,6 @@ import torch
 import src.utils as utils
 from torch import optim
 
-# 计算并向后传播 teacher embedding 的 loss，reg_loss 是正则化项
 class BGRLoss_tch:
     def __init__(self, model):
         self.model = model
@@ -29,7 +28,6 @@ class BGRLoss_tch:
 
         return loss.cpu().item()
 
-# 计算并向后传播 student embedding 的 loss
 # loss1: student BPR loss
 # loss2: student ID loss
 class BGRLoss_quant:
@@ -43,6 +41,7 @@ class BGRLoss_quant:
         loss1, loss2_i, reg_loss = self.model.loss(user_index, pos_index, neg_index)
         loss2 = torch.mean(loss2_i, dim=0)
         loss = loss1 + loss2
+        # loss = loss1
         reg_loss *= self.weight_decay
         loss += reg_loss
 
@@ -52,13 +51,9 @@ class BGRLoss_quant:
 
         return loss.cpu().item(), loss1.cpu().item(), loss2.cpu().item(), loss2_i
 
-# 全精度预训练
+
 def Train_full(dataset, model, epoch, loss_f, neg_ratio=1, summarizer=None):
     model.train()
-
-    # 先采样生成一个样本池，一个 epoch 会以 batch 的大小采样来遍历这个样本池
-    # 样本池的 size 为 # users，每个 user 取一组 uij
-    # j 个数为 n_neg * K，n_neg 为负采样个数，K 为 K-pair BPR
 
     with utils.timer(name='Sampling'):
         samples = utils.uniform_sampler(dataset=dataset, neg_ratio=neg_ratio*board.args.bpr_neg_num)
@@ -71,8 +66,7 @@ def Train_full(dataset, model, epoch, loss_f, neg_ratio=1, summarizer=None):
     user_index = user_index.to(device=board.DEVICE)
     pos_item_index = pos_item_index.to(device=board.DEVICE)
     neg_item_index = neg_item_index.to(device=board.DEVICE)
-
-    # batch 的个数 = 向上取整（样本池 size / batch size） 
+ 
     num_batch = len(user_index) // board.args.train_batch + 1
     avg_loss = 0.
 
@@ -95,7 +89,7 @@ def Train_full(dataset, model, epoch, loss_f, neg_ratio=1, summarizer=None):
 
     return info
 
-# 二值化训练
+
 def Train_quant(dataset, model, epoch, loss_f, neg_ratio=1, summarizer=None):
     model.train()
 
@@ -168,7 +162,7 @@ def batch_infer(tensors):
             'precision': np.array(pre),
             'ndcg': np.array(ndcg)}
 
-# test & evaluate 过程
+
 def Inference(dataset, model, epoch, summarizer=None):
     test_batch_size = board.args.test_batch
     model.eval()

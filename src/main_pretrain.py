@@ -1,7 +1,7 @@
 """
-@author:chenyankai
+@author:chenyankai, queyue
 @file:main.py
-@time:2021/11/11
+@time:2024/6/28
 """
 import os
 import sys
@@ -14,6 +14,7 @@ ROOT = join(PATH, '../')
 sys.path.append(ROOT)
 
 from torch.utils.tensorboard import SummaryWriter
+# from tensorboardX import SummaryWriter
 import src.data_loader as data_loader
 import datetime
 import pytz
@@ -73,7 +74,6 @@ def pretrain():
 
             logging.info(f'EPOCH[{epoch + 1}/{board.args.epoch}] {info} ')
             
-            # Save optimal model
             if max_recall20 < results['recall'][0]:
                 max_recall20 = results['recall'][0]
                 logging.info(f'Summary at recall = {max_recall20}')
@@ -88,7 +88,7 @@ def pretrain():
                                 'pos_rank_LW': model.pos_rank,
                                 'neg_rank_LW': model.neg_rank,
                                 'hard_rank_LW': model.hard_neg_rank  
-                                },      
+                                },
                                weight_file)
                 else:
                     file = f"{board.args.model}-{board.args.dataset}-{board.args.bin_dim}.pth.tar"

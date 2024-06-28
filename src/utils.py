@@ -1,7 +1,7 @@
 """
-@author:chenyankai
+@author:chenyankai, queyue
 @file:utils.py
-@time:2021/11/11
+@time:2024/6/28
 """
 
 import src.powerboard as board

@@ -1,7 +1,7 @@
 """
-@author:chenyankai
+@author:chenyankai, queyue
 @file:model.py
-@time:2021/11/11
+@time:2024/6/28
 """
 import torch
 import torch.nn as nn
@@ -34,31 +34,27 @@ class BiGeaR_tch(BasicModel):
         self.user_embed = nn.Embedding(num_embeddings=self.num_users, embedding_dim=self.dim)
         self.item_embed = nn.Embedding(num_embeddings=self.num_items, embedding_dim=self.dim)
         self.lambdas = self.compute_concat_scaler()
+        # K-pair BPR
         self.K = board.args.bpr_neg_num
+        # Negative sample number
         self.n_negs = board.args.neg_ratio
-        self.alpha = board.args.alpha
         
         self.pos_rank = None
         self.neg_rank = None
         self.hard_neg_rank = None
 
+        
         nn.init.normal_(self.user_embed.weight, std=0.1)
         nn.init.normal_(self.item_embed.weight, std=0.1)
         board.cprint('initializing with NORMAL distribution.')
 
         self.f = nn.Sigmoid()
         self.Graph = self.dataset.load_sparse_graph()
-        
-        if board.args.dataset in board.batch_ranking_list:
-            self.ran_num = [1, 1]
-        else:
-            self.ran_num = [board.args.neg_ratio, self.dim]
 
-
+   
     def compute_concat_scaler(self):
         lambdas = [torch.tensor((float)(x + 1) / (self.num_layers + 1)) for x in range(self.num_layers + 1)]
         return lambdas
-
 
     # Embedding aggregation
     def aggregate_embed(self): 
@@ -87,16 +83,17 @@ class BiGeaR_tch(BasicModel):
         loss = torch.mean(torch.log(1+torch.exp(neg_scores - pos_scores.unsqueeze(dim=1)).sum(dim=1)))
         return loss
 
-
+   
     def negative_synthesizing(self, con_origin_user_embed, con_origin_item_embed, user_index, neg_candidates, pos_item):
         batch_size = user_index.shape[0]
         u_e, p_e = con_origin_user_embed[user_index], con_origin_item_embed[pos_item]
-        n_e = con_origin_item_embed[neg_candidates]  # [batch_size, n_negs, (1 + num_layer), dim]
         
-        seed = torch.rand(batch_size, self.ran_num[0], p_e.shape[1], self.ran_num[1]).to(p_e.device)
-
+        """positive mixing"""
+        n_e = con_origin_item_embed[neg_candidates]  # [batch_size, n_negs, (1 + num_layer), dim]
+        seed = torch.rand_like(n_e)
         n_e_ = seed * p_e.unsqueeze(dim=1) + (1 - seed) * n_e  # mixing
-               
+        
+        """hop mixing"""
         scores = (u_e.unsqueeze(dim=1) * n_e_).sum(dim=-1)  # [batch_size, n_negs, num_layer+1]
         indices = torch.max(scores, dim=1)[1].detach()
         neg_items_emb_ = n_e_.permute([0, 2, 1, 3])  # [batch_size, num_layer+1, n_negs, dim]
@@ -133,7 +130,6 @@ class BiGeaR_tch(BasicModel):
         loss1 = self._BPR_loss(u_e, pos_e, neg_e)
         return loss1, reg_loss
 
-
     def get_scores(self, user_index):
         all_user_embed, all_item_embed = self.aggregate_embed()
         
@@ -143,7 +139,6 @@ class BiGeaR_tch(BasicModel):
         user_embed = all_user_embed[user_index.long()]
         scores = self.f(torch.matmul(user_embed, all_item_embed.t()))
         return scores
-
 
     def summary(self):
         # Embeddings
@@ -174,7 +169,7 @@ class BiGeaR_tch(BasicModel):
             
             con_origin_users_embed, con_origin_items_embed = torch.split(con_embed_i, [self.num_users, self.num_items])
             score_i = torch.matmul(con_origin_users_embed, con_origin_items_embed.t())
-            
+         
             hard_rank_i = []
             for user in range(score_i.shape[0]):
                 user_neg_items = all_neg[user]
@@ -192,7 +187,6 @@ class BiGeaR_tch(BasicModel):
         self.pos_rank = torch.stack(pos_rank_list_LW, dim=2)
         self.neg_rank = torch.stack(neg_rank_list_LW, dim=2)
         self.hard_neg_rank = torch.stack(hard_rank_list_LW, dim=2)
-
 
     def batch_rank(self, user_tensor, item_tensor):
         embed_list = [user_tensor, item_tensor]
@@ -268,18 +262,11 @@ class BiGeaR(BasicModel):
 
         self.Graph = self.dataset.load_sparse_graph()
 
-        self.alpha = board.args.alpha
-
         self.compute_rank = board.args.compute_rank
         if self.compute_rank == 1:
             self.pos_rank_tch, self.neg_rank_tch, self.hard_rank_tch = self.get_tch_rank()
         else:
             self.score_tch = self.get_tch_score()
-            
-        if board.args.dataset in board.batch_ranking_list:
-            self.ran_num = 1
-        else:
-            self.ran_num = board.args.neg_ratio
 
     def compute_concat_scaler(self):
         lambdas = [torch.tensor((float)(x + 1) / (self.num_layers + 1)) for x in range(self.num_layers + 1)]
@@ -394,18 +381,18 @@ class BiGeaR(BasicModel):
         rd_loss = torch.stack(rd_loss, dim=0)
         return rd_loss
     
-
+    
     def negative_synthesizing(self, con_origin_user_embed, con_origin_item_embed, user_index, neg_candidates, pos_item):
         batch_size = user_index.shape[0]
         u_e, p_e = con_origin_user_embed[user_index], con_origin_item_embed[pos_item]
         
+        """positive mixing"""
         n_e = con_origin_item_embed[neg_candidates]  # [batch_size, n_negs, (1 + num_layer), dim]
         
-        seed = None
-        # Random weight
-        seed = torch.rand(batch_size, self.ran_num, p_e.shape[1], self.dim).to(p_e.device)   
+        seed = torch.rand_like(n_e) * board.args.reg
         n_e_ = seed * p_e.unsqueeze(dim=1) + (1 - seed) * n_e  # mixing
-               
+        
+        """hop mixing""" 
         scores = (u_e.unsqueeze(dim=1) * n_e_).sum(dim=-1)  # [batch_size, n_negs, num_layer+1]
         indices = torch.max(scores, dim=1)[1].detach()
         neg_items_emb_ = n_e_.permute([0, 2, 1, 3])  # [batch_size, num_layer+1, n_negs, dim]
