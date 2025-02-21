@@ -4,6 +4,8 @@ This is the PyTorch implementation for the paper:
 
 "Learning Binarized Representations with Pseudo-positive Sample Enhancement for Efficient Graph Collaborative Filtering." *Yankai Chen, Yue Que, Xinning Zhang, Chen Ma, and Irwin King.*
 
+This implementation is adapted from [BiGeaR](https://github.com/yankai-chen/BiGeaR), the predecessor of BiGeaR++.
+
 ## Environment Requirement
 
 The code runs well under python 3.6. The required packages are referred to <b>env.txt</b>.
