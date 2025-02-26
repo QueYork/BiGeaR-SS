@@ -29,7 +29,7 @@ def parse_args():
     parse.add_argument('--compute_rank', type=int, default=1)  
     parse.add_argument('--norm_a', type=float, default=1., help='normal distribution')                           
     parse.add_argument('--neg_ratio', type=int, default=8, help='the ratio of negative sampling')
-    parse.add_argument('--bpr_neg_num', type=int, default=1, help='number of negative samples included in K-pair BPR loss function')
+    parse.add_argument('--bpr_neg_num', type=int, default=4, help='number of negative samples included in K-pair BPR loss function')
     parse.add_argument('--eps', type=float, default=1e-20, help='epsilon in gumbel sampling')
     parse.add_argument("--reg", type=float, default='1.0', help="Control the extent of positive mixing")
     

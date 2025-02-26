@@ -29,11 +29,11 @@ python main_quant.py --dataset book --lr 5e-4 --weight 1e-6 --epoch 400 --neg_ra
 
 1. You can also train the model from scratch to train the teacher embedding checkpoints for each dataset.  
 ```
-python main_pretrain.py --dataset movie --lr 1e-3 --weight 1e-4 --epoch 40 --neg_ratio 8 --bpr_neg_num 4 --N 50
-python main_pretrain.py --dataset gowalla --lr 1e-3 --weight 5e-5 --epoch 20 --neg_ratio 36 --bpr_neg_num 4 --N 25
-python main_pretrain.py --dataset pinterest --lr 5e-4 --weight 1e-4 --epoch 25 --neg_ratio 8 --bpr_neg_num 4 --N 25
-python main_pretrain.py --dataset yelp --lr 5e-4 --weight 1e-4 --epoch 50 --neg_ratio 48 --bpr_neg_num 4 --N 25
-python main_pretrain.py --dataset book --lr 5e-4 --weight 1e-6 --epoch 100 --neg_ratio 48 --bpr_neg_num 4 --N 25
+python main_pretrain.py --dataset movie --lr 1e-3 --weight 1e-4 --epoch 40 --neg_ratio 8 --N 50
+python main_pretrain.py --dataset gowalla --lr 1e-3 --weight 5e-5 --epoch 20 --neg_ratio 36 --N 25
+python main_pretrain.py --dataset pinterest --lr 5e-4 --weight 1e-4 --epoch 25 --neg_ratio 8 --N 25
+python main_pretrain.py --dataset yelp --lr 5e-4 --weight 1e-4 --epoch 50 --neg_ratio 48 --N 25
+python main_pretrain.py --dataset book --lr 5e-4 --weight 1e-6 --epoch 100 --neg_ratio 48 --N 25
 ```
 
 2. Then conduct binarization with <b>main_quant.py</b> similarly for each dataset.</li>
