@@ -53,7 +53,7 @@ def quant():
         board.cprint('tensorboard disabled.')
 
     try:
-        max_recall20 = []
+        max_recall20 = None
         # logger initializer
         log_name = utils.create_log_name(log_path)
         utils.log_config(path=log_path, name=log_name, level=logging.DEBUG, console_level=logging.DEBUG, console=True)
@@ -70,10 +70,15 @@ def quant():
             logging.info(f'[testing at epoch-{epoch}]')
             logging.info(results)
 
-            max_recall20.append(results['recall'][0])
+            # max_recall20.append(results['recall'][0])
             logging.info(f'EPOCH[{epoch + 1}/{board.args.epoch}] {info} ')
+            
+            if max_recall20 == None or max_recall20 < results['recall'][0]:
+                max_recall20 = results
+                logging.info(f'Summary at recall = {max_recall20['recall'][0]}')
 
-        logging.info(nowtime.strftime("%m-%d-%Hh%Mm%Ss:  ") + str(max(max_recall20)) + "\n")
+        logging.info("\nFinal result of the highest Recall: ")
+        logging.info(max_recall20)
 
     except:
         raise NotImplementedError('Error in running main file')
