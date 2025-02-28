@@ -73,9 +73,9 @@ def quant():
             # max_recall20.append(results['recall'][0])
             logging.info(f'EPOCH[{epoch + 1}/{board.args.epoch}] {info} ')
             
-            if max_recall20 == None or max_recall20 < results['recall'][0]:
+            if max_recall20 == None or max_recall20['recall'][0] < results['recall'][0]:
                 max_recall20 = results
-                logging.info(f'Summary at recall = {max_recall20['recall'][0]}')
+                logging.info(f"Summary at recall = {max_recall20['recall'][0]}")
 
         logging.info("\nFinal result of the highest Recall: ")
         logging.info(max_recall20)
