@@ -38,6 +38,28 @@ python main_pretrain.py --dataset book --lr 5e-4 --weight 1e-6 --epoch 100 --neg
 
 2. Then conduct binarization with <b>main_quant.py</b> similarly for each dataset.</li>
 
+## Citation
+Please kindly cite our paper if you find this code useful for your research:
+
+```
+@article{bigear2025,
+author = {Chen, Yankai and Que, Yue and Zhang, Xinni and Ma, Chen and King, Irwin},
+title = {Learning Binarized Representations with Pseudo-positive Sample Enhancement for Efficient Graph Collaborative Filtering},
+year = {2025},
+issue_date = {September 2025},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {43},
+number = {5},
+issn = {1046-8188},
+url = {https://doi.org/10.1145/3744239},
+doi = {10.1145/3744239},
+journal = {ACM Trans. Inf. Syst.},
+month = jul,
+articleno = {131},
+numpages = {28},
+}
+```
 
 Thank you for your interest in our work!
 
